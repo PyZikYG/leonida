@@ -842,11 +842,26 @@ public:
             kind == leonida::IndirectKind::draw ? sizeof(D3D12_DRAW_ARGUMENTS)
             : kind == leonida::IndirectKind::draw_indexed ? sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)
             : kind == leonida::IndirectKind::dispatch ? sizeof(D3D12_DISPATCH_ARGUMENTS)
+            : kind == leonida::IndirectKind::dispatch_mesh ? sizeof(D3D12_DISPATCH_MESH_ARGUMENTS)
             : 0;
         if (!record_size || stride < record_size || stride % 4 != 0) return check(false);
         if (argument_buffer_offset > arg_desc.Width ||
             UINT64(max_command_count) > (arg_desc.Width - argument_buffer_offset) / stride)
             return check(false);
+        if (kind == leonida::IndirectKind::dispatch_mesh) {
+            if (type_ != D3D12_COMMAND_LIST_TYPE_DIRECT || count_buffer) return check(false);
+            if (!max_command_count) return;
+            if (!graphics_pipeline_ || !graphics_.layout) return check(false);
+            if (!(viewport_.width > 0) || !(viewport_.height > 0)) return;
+            const auto arguments = resource_id(argument_buffer);
+            if (!arguments) return check(false);
+            leonida::Draw draw{graphics_pipeline_, graphics_.data, draw_views(), depth_, {}, 0, viewport_,
+                               scissor_, blend_factor_, front_stencil_ref_, back_stencil_ref_};
+            draw.mesh = true;
+            draw.mesh_indirect = leonida::MeshIndirectArguments{arguments, argument_buffer_offset, stride,
+                                                                max_command_count};
+            return check(list_.draw(std::move(draw)));
+        }
         leonida::ExecuteIndirect cmd{};
         cmd.kind = kind;
         cmd.stride = stride;
